@@ -37,24 +37,30 @@ Test cases:
 Test cases are automated using testing package, included in test sub directory
 
 Test case 1:
-Configure number of server as 100, check objects are redistributed
+Configure number of server as 100, check objects are redistributed.
+
 Test case 2:
-Bring down a server, check number of active server is reduced and objects are redistbuted to all other active servers
+Bring down a server, check number of active server is reduced and objects are redistbuted to all other active servers.
+
 Test case 3:
-Bring up the server , check objects are rebalanced again
+Bring up the server , check objects are rebalanced again.
+
 Test case 4:
-Bring down 10 servers, check number of active servers and its object
+Bring down 10 servers, check number of active servers and its object.
+
 Test case 5:
-Bring up 10 servers, check number of active servers and its object
+Bring up 10 servers, check number of active servers and its object.
 
 Test case 6:
-configure number of server as out of bound, 0 or 4096.(nagative test case)
+configure number of server as out of bound, 0 or 4096.(nagative test case).
+
 
 Approach 2:
 ==========
 same algorimthm, but implemention is different,
 Additionaly 
 1) maintain array of all objects in the global strucutre similar to Servers which has slices of objects, these slices can be increased/decreased from global array based on number of active servers, this way we can avoid looping objects.
+
 2) use "goroutine" to multithread the application to handle uses cases like multiple servers goes down/up at the same time.
 (It is not yet implemented)
 
