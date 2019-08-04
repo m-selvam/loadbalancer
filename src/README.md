@@ -12,7 +12,8 @@ Protocol between the servers to detect a server failure or recovery is beyond th
 Solution:
 =========
 Alogrithm used: Objects are redistributed across servers based on Round Robin plus server status, CPU and Memory usage
-
+Approach 1:
+==========
 1) Servers are mainted in the map, indexed with server IP which are dynamically created based on number of number of servers
 2) Each server has slices of objects, cpu and memory status
 3) Objects are Distributed to each based based on number of objects divided by number of servers, so that it will be equally distributed
@@ -44,6 +45,15 @@ Bring up 10 servers, check number of active servers and its object
 Test case 6:
 configure number of server as out of bound, 0 or 4096.(nagative test case)
 
+Approach 2:
+==========
+same algorimthm, but implemention is different,
+Additionaly 
+1) maintain array of all objects in the global strucutre similar to Servers which has slices of objects, these slices can be increased/decreased from global array based on number of active servers, this way we can avoid looping objects.
+2) use "goroutine" to multithread the application to handle uses cases like multiple servers goes down/up at the same time.
+(It is not yet implemented)
+
 
 Pending activity:
+================
 Testing, found vet error, needs to be fixed
