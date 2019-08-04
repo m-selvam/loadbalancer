@@ -2,16 +2,21 @@ Requirement:
 ==========
 Distributed Load-balancer:
 
-Design and implement a load-balancer algorithm that distributes a set of objects say [O1, O2, ….., On] across a set of servers [S1, S2, ….., Sm]. For implementation, assume that the objects are integer values in a bounded range say [0…..4095], and servers are unique IPv4 addresses.
+Design and implement a load-balancer algorithm that distributes a set of objects say [O1, O2, ….., On] across a set of servers [S1, S2, ….., Sm]. 
+For implementation, assume that the objects are integer values in a bounded range say [0…..4095], and servers are unique IPv4 addresses.
 
 Design Considerations:
 This algorithm runs in a distributed manner on each server. Each server receives the full set of objects [O1, O2, ….., On] and the full set of servers [S1, S2, ….., Sm]. Each server runs the same algorithm and should deterministically arrive at the same result, with respect to object assignments to each server (including itself). The reason is to minimize the inter-server communication to a minimum.
+
 Algorithm should handle server failures and recovery and re-assign objects accordingly. An important design consideration is to try and minimize disruption on a server failure, aka, limit re-assignment to a minimum set of objects as far as possible. Again, keep in mind that the result needs be deterministic and consistent across all the servers.
+
 Protocol between the servers to detect a server failure or recovery is beyond the scope of this problem. Assume a server failure OR recovery is magically relayed to each servers. From the point of view of your implementation, this is one of the events that the algorithm should handle. How this event is produced is not relevant.
 
 Solution:
 =========
-Alogrithm used: Objects are redistributed across servers based on Round Robin plus server status, CPU and Memory usage
+
+Alogrithm used: Objects are redistributed across servers based on Round Robin plus server status, CPU and Memory usage.
+
 Approach 1:
 ==========
 1) Servers are mainted in the map, indexed with server IP which are dynamically created based on number of number of servers
