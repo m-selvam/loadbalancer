@@ -18,8 +18,7 @@ Solution:
 Alogrithm used: Objects are redistributed across servers based on Round Robin plus server status, CPU and Memory usage.
 
 Assumption: Server IPs and Server IDs are unique which are linearly created/updated during initialization, server down or server up, Acutally this suppose to happen via IPC events.
-Approach 1:
-==========
+
 1) Servers are mainted in the map, indexed with server IP which are dynamically created based on number of number of servers
 2) Each server has map of objects, cpu and memory status
 3) Every server allocates objects from pool of objects based on Object_ID modulo by number of active servers 
@@ -120,16 +119,5 @@ Test case 6:
 configure number of server as out of bound, 0 or 4096.(nagative test case).
 
 
-Approach 2:
-==========
-same algorimthm, but implemention is different,
-Additionaly 
-1) maintain array of all objects in the global strucutre similar to Servers which has slices of objects, these slices can be increased/decreased from global array based on number of active servers, this way we can avoid looping objects.
-
-2) use "goroutine" to multithread the application to handle uses cases like multiple servers goes down/up at the same time.
-(It is not yet implemented)
 
 
-Pending activity:
-================
-Testing, found vet error, needs to be fixed
