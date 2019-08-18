@@ -17,14 +17,13 @@ Solution:
 
 Alogrithm used: Objects are redistributed across servers based on Round Robin plus server status, CPU and Memory usage.
 
+Assumption: Server IPs and Server IDs are unique which are linearly created/updated during initialization, server down or server up, Acutally this suppose to happen via IPC events.
 Approach 1:
 ==========
 1) Servers are mainted in the map, indexed with server IP which are dynamically created based on number of number of servers
-2) Each server has slices of objects, cpu and memory status
-3) Objects are Distributed to each based based on number of objects divided by number of servers, so that it will be equally distributed
-   so that each server will arive the same result.
-4) When server goes down, objects from that servers are that server is redistributed to other servers and slice is set to null
-5) When server recovers, based on number of active servers, number of objects per each server is re calculated, and excess object is reallocated to recovering server
+2) Each server has map of objects, cpu and memory status
+3) Every server allocates objects from pool of objects based on Object_ID modulo by number of active servers 
+4) When server goes down/up, number of active servers, server ID are updated, then objects are redistributed.
 
 
 Language: Golang 1.11, its a modern language has lots of built-in echo system to write these type of application
@@ -37,13 +36,79 @@ Test cases:
 Test cases are automated using testing package, included in test sub directory
 
 Test case 1:
-Configure number of server as 100, check objects are redistributed.
+Configure number of server as 5, check objects are redistributed.
+Log:
+$ go test -run "TestObjectDistributionAcrossServer"
+Number of Total servers:5
+Number of Active Servers:5
+Number of Total objects:4095
+Server IP : 10.1.0.1, Server ID: 0 Number of objects: 819
+Server IP : 10.1.0.2, Server ID: 1 Number of objects: 819
+Server IP : 10.1.0.3, Server ID: 2 Number of objects: 819
+Server IP : 10.1.0.4, Server ID: 3 Number of objects: 819
+Server IP : 10.1.0.5, Server ID: 4 Number of objects: 819
+PASS
+ok      test    0.481s
+
+
 
 Test case 2:
 Bring down a server, check number of active server is reduced and objects are redistbuted to all other active servers.
+$ go test -run "TestServerDown"
+Servers status before a server Down
+
+Number of Total servers:5
+Number of Active Servers:5
+Number of Total objects:4095
+Server IP : 10.1.0.5, Server ID: 1 Number of objects: 819
+Server IP : 10.1.0.1, Server ID: 2 Number of objects: 819
+Server IP : 10.1.0.2, Server ID: 3 Number of objects: 819
+Server IP : 10.1.0.3, Server ID: 4 Number of objects: 819
+Server IP : 10.1.0.4, Server ID: 0 Number of objects: 819
+Redistribute_obj_Server_down:Server 10.1.0.1 down
+Servers status after a server Down
+
+Number of Total servers:5
+Number of Active Servers:4
+Number of Total objects:4095
+Server IP : 10.1.0.2, Server ID: 0 Number of objects: 1023
+Server IP : 10.1.0.3, Server ID: 1 Number of objects: 1024
+Server IP : 10.1.0.4, Server ID: 2 Number of objects: 1024
+Server IP : 10.1.0.5, Server ID: 3 Number of objects: 1024
+Server IP : 10.1.0.1, Server ID: -1 Number of objects: 0
+PASS
+ok      test    0.482s
+
+SMUTHIAH@SMUTHIAH-PC MINGW64 ~/go/awesomeProject1/loadbalancer/src/test (master)
+$
 
 Test case 3:
 Bring up the server , check objects are rebalanced again.
+$ go test -run "TestServerUp"
+Redistribute_obj_Server_down:Server 10.1.0.1 down
+Servers status before a server Up
+
+Number of Total servers:5
+Number of Active Servers:4
+Number of Total objects:4095
+Server IP : 10.1.0.3, Server ID: 1 Number of objects: 1024
+Server IP : 10.1.0.4, Server ID: 2 Number of objects: 1024
+Server IP : 10.1.0.5, Server ID: 3 Number of objects: 1024
+Server IP : 10.1.0.1, Server ID: -1 Number of objects: 0
+Server IP : 10.1.0.2, Server ID: 0 Number of objects: 1023
+Redistribute_obj_Server_up:Server 10.1.0.1 upServers status before a server Up
+
+Number of Total servers:5
+Number of Active Servers:5
+Number of Total objects:4095
+Server IP : 10.1.0.1, Server ID: 2 Number of objects: 819
+Server IP : 10.1.0.2, Server ID: 3 Number of objects: 819
+Server IP : 10.1.0.3, Server ID: 4 Number of objects: 819
+Server IP : 10.1.0.4, Server ID: 0 Number of objects: 819
+Server IP : 10.1.0.5, Server ID: 1 Number of objects: 819
+PASS
+ok      test    0.449s
+
 
 Test case 4:
 Bring down 10 servers, check number of active servers and its object.
