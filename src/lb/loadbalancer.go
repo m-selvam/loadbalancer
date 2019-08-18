@@ -1,5 +1,6 @@
-//Author: Selvam Muthiah
-//Distributed load balance algorithm
+/*Author: Selvam Muthiah
+Distributed load balance algorithm */
+
 package lb
 
 import (
@@ -10,209 +11,175 @@ import (
 
 //Server structure contain server details
 type Server struct {
-	Ip_address   string
-	Oper_status  bool     // Server operational status, true is up and false is down
-	Cpu_usage    int      // represented in percentage 100 is maximum, 80% is threshold, this is just a place holder for this program
-	Memory_usage int      // represented in percentage 100 is maximum, 80% is threshold, this is just a place holder for this program
-	Objects      []Object // list of running objects in the Server
+	IPAddress   string
+	ServerID    int            //Server identifier
+	OperStatus  bool           // Server operational status, true is up and false is down
+	CPUUsage    int            // represented in percentage 100 is maximum, 80% is threshold, this is just a place holder for this program
+	MemoryUsage int            // represented in percentage 100 is maximum, 80% is threshold, this is just a place holder for this program
+	Objects     map[int]Object // list of running objects in the Server
 }
 
 //Object details
 type Object struct {
-	Object_id int // object identifier
-	signature string
+	OjbectID  int // object identifier
+	Signature string
 }
 
-//Distributed_lb Redistributed Load Balance table
-type Distributed_lb struct {
-	Num_servers        int // number of servers
-	Num_active_servers int // number of actively running server, it is primary used when server goes down/recover
-	Num_object         int //4095 for this project but it can be changed
-	Server_map         map[string]Server
+//DistributedLB Redistributed Load Balance table
+type DistributedLB struct {
+	NumServers       int // number of servers
+	NumActiveServers int // number of actively running server, it is primary used when server goes down/recover
+	NumObject        int //4095 for this project but it can be changed
+	ObjectStore      []int
+	ServerMap        map[string]Server
 }
 
-//Initialize_lb Initialze distributed load balancer
+//InitializeLoadBalancer Initialze distributed load balancer
 //This function builds a Map table of servers, similar to Hashtable in C
-func (lb *Distributed_lb) Initialize_lb(list int) error {
+func (lb *DistributedLB) InitializeLoadBalancer(list int) error {
 	if list < 1 || list > 4095 {
-		fmt.Errorf("Number of servers is out of bound %d, it should be in the range of 1-4095", list)
+		//fmt.Errorf("Number of servers is out of bound %d, it should be in the range of 1-4095", list)
 		return errors.New("Number of servers is out of bound")
 	}
-	host_id_max_per_byte := 254
-	lb.Num_servers = list
-	lb.Num_object = 4095 // This is as per requirement
-	lb.Server_map = make(map[string]Server, 0)
-	host_msb := list / host_id_max_per_byte // thi is used to created unique server IP address for each server
-	host_lsb := list % host_id_max_per_byte
+	hostIDMaxPerByte := 254
+	lb.NumServers = list
+	lb.NumActiveServers = list
+	lb.NumObject = 4095 // This is as per requirement
+	lb.ServerMap = make(map[string]Server, 0)
+	hostMSB := list / hostIDMaxPerByte // thi is used to created unique server IP address for each server
+	hostLSB := list % hostIDMaxPerByte
+	serverID := 0
 	//create server list
 	//update default values , assumption is default up, ideally it should be update by IPC
-	for i := 1; i <= host_lsb; i++ {
-		ip_address := "10.1.0." + strconv.Itoa(i)
+	for i := 1; i <= hostLSB; i++ {
+		IPAddress := "10.1.0." + strconv.Itoa(i)
 		serv := Server{}
-		serv.Ip_address = ip_address
-		serv.Oper_status = true
-		serv.Cpu_usage = 0
-		serv.Memory_usage = 0
-		lb.Server_map[ip_address] = serv
+		serv.IPAddress = IPAddress
+		serv.ServerID = serverID
+		serverID++
+		serv.OperStatus = true
+		serv.CPUUsage = 0
+		serv.MemoryUsage = 0
+		lb.ServerMap[IPAddress] = serv
 	}
 
-	for i := 1; i <= host_msb; i++ {
-		for j := 1; j <= host_id_max_per_byte; j++ {
-			ip_address := "10.1." + strconv.Itoa(i) + "." + strconv.Itoa(i)
+	for i := 1; i <= hostMSB; i++ {
+		for j := 1; j <= hostIDMaxPerByte; j++ {
+			IPAddress := "10.1." + strconv.Itoa(i) + "." + strconv.Itoa(i)
 			serv := Server{}
-			serv.Ip_address = ip_address
-			serv.Oper_status = true
-			serv.Cpu_usage = 0
-			serv.Memory_usage = 0
-			lb.Server_map[ip_address] = serv
+			serv.IPAddress = IPAddress
+			serv.ServerID = serverID
+			serverID++
+			serv.OperStatus = true
+			serv.CPUUsage = 0
+			serv.MemoryUsage = 0
+			lb.ServerMap[IPAddress] = serv
 		}
 	}
+
+	//store object in object store
+	for i := 1; i <= 4095; i++ {
+		lb.ObjectStore = append(lb.ObjectStore, i)
+	}
+
 	return nil
 }
 
-//Redistribute_objects Load balance objects across server
-func (lb *Distributed_lb) Redistribute_objects() {
-	num_obj_per_server := lb.Num_object / lb.Num_servers
-	num_remain_obj := lb.Num_object % lb.Num_servers
-	object_id := 1
-	extra_object_offset := num_obj_per_server * lb.Num_servers
-	for server_ip, server := range lb.Server_map {
-		//Distribute object only for the servers online and cpu, memory threshold less than 75%
-		if server.Oper_status == true && server.Cpu_usage <= 75 && server.Memory_usage <= 75 {
-			for count := 1; count <= num_obj_per_server; count++ {
+//RedistributeObjects Load balance objects across server
+//This is redistribute algorithm will be called on each server during following scenarios
+// 1) after server boot up/init , 2) Server down notification from other server 3) Server up notification from other server
+func (lb *DistributedLB) RedistributeObjects(server *Server) error {
+	//Distribute object only for the servers online and cpu, memory threshold less than 75%
+	if server.OperStatus != true && server.CPUUsage >= 75 && server.MemoryUsage >= 75 {
+		fmt.Printf("server is not up or it reached its max threshold CPU Usage %d, Memory Usage %d", server.CPUUsage, server.MemoryUsage)
+		return errors.New("server is not up or it reached its max threshold CPU Usage")
+	}
+	objectMap := make(map[int]Object)
+	for _, ojbectID := range lb.ObjectStore {
+		//This ensure that every server will have unique objects, for example if object id is 1, then it will be assigned to only server id 1,
+		myObject := ojbectID % lb.NumActiveServers
 
-				var obj Object
-				lb.Num_active_servers++
-				obj.Object_id = object_id
-				object_id++
-				obj.signature = server_ip
-				server.Objects = append(server.Objects, obj)
-				//calculate CPU and memory usage percentage, actually this is just place holder, we should get it from actual server
-				server.Memory_usage = (len(server.Objects) / 4095) * 100
-				server.Cpu_usage = (len(server.Objects) / 4095) * 100
-			}
-			//Add an object from extra pool of objects
-			if num_remain_obj > 0 {
-
-				var obj Object
-				extra_object_offset++
-				obj.Object_id = extra_object_offset
-				obj.signature = server_ip
-				server.Objects = append(server.Objects, obj)
-				//calculate CPU and memory usage percentage, actually this is just place holder, we should get it from actual server
-				server.Memory_usage = (len(server.Objects) / 4095) * 100
-				server.Cpu_usage = (len(server.Objects) / 4095) * 100
-			}
+		if myObject == server.ServerID {
+			var obj Object
+			obj.OjbectID = ojbectID
+			obj.Signature = server.IPAddress
+			objectMap[ojbectID] = obj
+			//calculate CPU and memory usage percentage, actually this is just place holder
+			server.MemoryUsage = (len(objectMap) / 4095) * 100
+			server.CPUUsage = (len(objectMap) / 4095) * 100
 		}
+	}
+	server.Objects = objectMap
+	return nil
+}
+
+//UpdateServers recalulate server id and update object IDs, Actually this will be updated through IPC,
+func (lb *DistributedLB) UpdateServers() {
+	id := 0
+	//re initialze server ID, Assumption: acutally this will by synchronized across the server by IPC
+	for serverIP, server := range lb.ServerMap {
+		if server.IPAddress != "" && server.OperStatus == true {
+			server.ServerID = id
+			id++
+			lb.ServerMap[serverIP] = server
+		}
+	}
+	for _, server := range lb.ServerMap {
+		//assign unique objects per server
+		lb.RedistributeObjects(&server)
+		lb.ServerMap[server.IPAddress] = server
 	}
 }
 
-//Redistribute_obj_Server_down redistribute objects from down server
-func (lb *Distributed_lb) Redistribute_obj_Server_down(ip_address string) error {
+//RedistributeObjServerdown redistribute objects from down server
+func (lb *DistributedLB) RedistributeObjServerdown(IPAddress string) error {
 
-	fmt.Printf("Redistribute_obj_Server_down:Server %s down", ip_address)
-	if lb.Server_map[ip_address].Oper_status == false {
-		fmt.Printf("Server %s is already down", ip_address)
+	fmt.Printf("Redistribute_obj_Server_down:Server %s down\n\r", IPAddress)
+	if lb.ServerMap[IPAddress].OperStatus == false {
+		fmt.Printf("Server %s is already down", IPAddress)
 		return nil
 	}
-	lb.Num_active_servers--
-	server_down := lb.Server_map[ip_address]
-	server_down.Oper_status = false
+	lb.NumActiveServers--
 
-	num_obj_per_server := len(lb.Server_map[ip_address].Objects) / lb.Num_active_servers
-	num_remain_obj := len(lb.Server_map[ip_address].Objects) % lb.Num_active_servers
-	Index := 1
-	extra_object_offset := num_obj_per_server * lb.Num_servers
-	for _, server := range lb.Server_map {
-		//Distribute object only for the servers online and cpu, memory threshold less than 75%
-		if server.Oper_status == true && server.Cpu_usage <= 75 && server.Memory_usage <= 75 {
-			for count := 1; count <= num_obj_per_server; count++ {
-
-				server.Objects = append(server.Objects, server_down.Objects[Index])
-				Index++
-				//calculate CPU and memory usage percentage, actually this is just place holder, we should get it from actual server
-				server.Memory_usage = (len(server.Objects) / 4095) * 100
-				server.Cpu_usage = (len(server.Objects) / 4095) * 100
-			}
-			//Add an object from extra pool of objects
-			if num_remain_obj > 0 {
-
-				extra_object_offset++
-				server.Objects = append(server.Objects, server_down.Objects[extra_object_offset])
-				//calculate CPU and memory usage percentage, actually this is just place holder, we should get it from actual server
-				server.Memory_usage = (len(server.Objects) / 4095) * 100
-				server.Cpu_usage = (len(server.Objects) / 4095) * 100
-			}
-		}
-	}
-	server_down.Objects = nil
-	server_down.Cpu_usage = 0
-	server_down.Memory_usage = 0
+	server := lb.ServerMap[IPAddress]
+	server.OperStatus = false
+	server.ServerID = -1
+	lb.ServerMap[IPAddress] = server
 
 	return nil
 
 }
 
-//Redistribute_obj_Server_up redistribute objects from running servers to new server
-func (lb *Distributed_lb) Redistribute_obj_Server_up(ip_address string) error {
+//RedistributeObjServerUp redistribute objects from running servers to new server
+func (lb *DistributedLB) RedistributeObjServerUp(IPAddress string) error {
 
-	fmt.Printf("Redistribute_obj_Server_up:Server %s up", ip_address)
-	if lb.Server_map[ip_address].Oper_status == true {
-		fmt.Printf("Server %s is already up", ip_address)
+	fmt.Printf("Redistribute_obj_Server_up:Server %s up", IPAddress)
+	if lb.ServerMap[IPAddress].OperStatus == true {
+		fmt.Printf("Server %s is already up", IPAddress)
 		return nil
 	}
-	lb.Num_active_servers++
-	server_up := lb.Server_map[ip_address]
-	server_up.Oper_status = true
-	//copy objects from already running servers
-	num_obj_per_server := lb.Num_object / lb.Num_active_servers
-	num_remain_obj := lb.Num_object % lb.Num_active_servers
-	start_index := 0
+	lb.NumActiveServers++
+	server := lb.ServerMap[IPAddress]
+	server.OperStatus = true
+	lb.ServerMap[IPAddress] = server
 
-	for _, server := range lb.Server_map {
-		//Get objects from online servers
-		if server.Oper_status == true {
-
-			offset_index := num_obj_per_server
-			//add one more object if there is a un even number of objects
-			if num_remain_obj > 0 {
-				offset_index++
-				num_remain_obj--
-			}
-			original := server.Objects
-			if len(server.Objects) > offset_index {
-				max_num_obj := len(server.Objects) - offset_index
-				server_up.Objects[start_index:] = original[max_num_obj:]
-				//change the start index to copy from next server
-				start_index = len(server_up.Objects)
-				server.Objects[:offset_index] = original[:offset_index]
-			}
-
-			//Re calculate CPU and memory usage percentage,
-			server.Memory_usage = (len(server.Objects) / 4095) * 100
-			server.Cpu_usage = (len(server.Objects) / 4095) * 100
-
-			server_up.Memory_usage = (len(server_up.Objects) / 4095) * 100
-			server_up.Cpu_usage = (len(server_up.Objects) / 4095) * 100
-		}
-	}
 	return nil
 }
 
 //GetServerDetails Get all server or per server details
-func (lb *Distributed_lb) GetServerDetails(ip_address string) {
-	if ip_address != "" {
-		fmt.Printf("Server IP : %s", ip_address)
-		fmt.Printf("Number of objects: %d", len(lb.Server_map[ip_address].Objects))
-		fmt.Printf("List of objects: %v", lb.Server_map[ip_address].Objects)
+func (lb *DistributedLB) GetServerDetails(IPAddress string) {
+	if IPAddress != "" {
+		fmt.Printf("Server IP : %s \n\r", IPAddress)
+		fmt.Printf("Number of objects: %d\n\r", len(lb.ServerMap[IPAddress].Objects))
+		fmt.Printf("List of objects: %v\n\r", lb.ServerMap[IPAddress].Objects)
 	} else {
-		fmt.Printf("Number of running Servers:%d", lb.Num_active_servers)
-		fmt.Printf("Number of Total servers:%d", lb.Num_servers)
-		fmt.Printf("Number of Total objects:%d", lb.Num_object)
-		for server_ip, server := range lb.Server_map {
-			fmt.Printf("Server IP : %s", server_ip)
-			fmt.Printf("Number of objects: %d", len(server.Objects))
-			fmt.Printf("List of objects: %v", server.Objects)
+		fmt.Printf("Number of Total servers:%d\n\r", lb.NumServers)
+		fmt.Printf("Number of Active Servers:%d\n\r", lb.NumActiveServers)
+		fmt.Printf("Number of Total objects:%d\n\r", lb.NumObject)
+		for serverIP, server := range lb.ServerMap {
+			fmt.Printf("Server IP : %s, Server ID: %d ", serverIP, server.ServerID)
+			fmt.Printf("Number of objects: %d\n\r", len(server.Objects))
+			//fmt.Printf("List of objects: %v", server.Objects)
 		}
 	}
 }
